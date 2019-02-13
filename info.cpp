@@ -3,6 +3,7 @@
 // License (MS-RSL) that can be found in the LICENSE file.
 
 #include "info.h"
+#include <QVariant>
 
 OrderInfo::OrderInfo(OrderInfoPtr reverceOrder, const QString& getAddress) :
     orderId_(0),
@@ -19,9 +20,9 @@ OrderInfo::OrderInfo(long long orderId, const QJsonObject& order) :
     orderId_(orderId)
 {
     sendCur_ = order["sendCur"].toString();
-    sendCount_ = order["sendCount"].toInt();
+    sendCount_ = order["sendCount"].toVariant().toLongLong();
     getCur_ = order["getCur"].toString();
-    getCount_ = order["getCount"].toInt();
+    getCount_ = order["getCount"].toVariant().toLongLong();
     getAddress_ = order["getAddr"].toString();
 }
 

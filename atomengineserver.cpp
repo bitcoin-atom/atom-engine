@@ -186,7 +186,7 @@ void AtomEngineServer::onReadyRead()
                 }
             }
             if (command == "delete_order") {
-                long long id = req["id"].toInt();
+                long long id = req["id"].toVariant().toLongLong();
                 bool deleted = deleteOrder(id);
                 QString rep1 = "{\"reply\": \"delete_order_success\", \"id\": " + QString::number(id) + "}\n";
                 clientSocket->write(rep1.toStdString().c_str());
@@ -201,7 +201,7 @@ void AtomEngineServer::onReadyRead()
                 }
             }
             if (command == "create_trade") {
-                long long orderId = req["orderId"].toInt();
+                long long orderId = req["orderId"].toVariant().toLongLong();
                 QString initiatorAddr = req["address"].toString();
                 addrs_[initiatorAddr] = clientSocket->socketDescriptor();
                 TradeInfoPtr trade = createTrade(orderId, initiatorAddr);
@@ -284,11 +284,11 @@ bool AtomEngineServer::load()
                     createOrder(orderJson);
                 }
                 if (commandName == "delete_order") {
-                    long long id = req["id"].toInt();
+                    long long id = req["id"].toVariant().toLongLong();
                     deleteOrder(id);
                 }
                 if (commandName == "create_trade") {
-                    long long orderId = req["orderId"].toInt();
+                    long long orderId = req["orderId"].toVariant().toLongLong();
                     QString initiatorAddr = req["address"].toString();
                     createTrade(orderId, initiatorAddr);
                 }
@@ -356,7 +356,7 @@ TradeInfoPtr AtomEngineServer::createTrade(long long orderId, const QString& ini
 
 TradeInfoPtr AtomEngineServer::updateTrade(const QJsonObject& tradeJson)
 {
-    long long id = tradeJson["id"].toInt();
+    long long id = tradeJson["id"].toVariant().toLongLong();
     auto it = trades_.find(id);
     if (it != trades_.end()) {
         TradeInfoPtr trade = it->second;
