@@ -13,6 +13,7 @@
 
 namespace {
     const QString backupFileName = "info.dat";
+    const QString curVersion = "0.1.1";
 }
 
 AtomEngineServer::AtomEngineServer(int port) :
@@ -43,7 +44,7 @@ bool AtomEngineServer::run()
     }
     load();
     if (server_->listen(QHostAddress::Any, port_)) {
-        Logger::info() << "Atom engine was started success, port = " + QString::number(port_);
+        Logger::info() << "Atom engine was started success, port = " + QString::number(port_) + " version = " + curVersion;
         return true;
     } else {
         Logger::info() << "Atom engine starting failed";
