@@ -31,7 +31,11 @@ struct TradeInfo {
         order_(order),
         initiatorAddress_(initiatorAddress),
         initiatorCommissionPaid_(false),
-        participantCommissionPaid_(false)
+        participantCommissionPaid_(false),
+        refundedInit_(false),
+        refundedPart_(false),
+        refundTimeInit_(0),
+        refundTimePart_(0)
     {}
 
     long long tradeId_;
@@ -52,6 +56,11 @@ struct TradeInfo {
 
     bool initiatorCommissionPaid_;
     bool participantCommissionPaid_;
+
+    bool refundedInit_;
+    bool refundedPart_;
+    long long refundTimeInit_;
+    long long refundTimePart_;
 
     QString getJson() const;
 };

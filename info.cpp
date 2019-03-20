@@ -44,8 +44,21 @@ QString TradeInfo::getJson() const
         paidPart = "true";
     }
 
+    QString refundedInitStr = "false";
+    if (refundedInit_) {
+        refundedInitStr = "true";
+    }
+    QString refundedPartStr = "false";
+    if (refundedPart_) {
+        refundedPartStr = "true";
+    }
+
     QString res = "{" \
                     "\"id\": " + QString::number(tradeId_) + ", " \
+                    "\"refundedInit\": " + refundedInitStr + ", " \
+                    "\"refundedPart\": " + refundedPartStr + ", " \
+                    "\"refundTimeInit\": " + QString::number(refundTimeInit_) + ", " \
+                    "\"refundTimePart\": " + QString::number(refundTimePart_) + ", " \
                     "\"order\": " + order_->getJson() + ", " \
                     "\"initiatorAddr\": \"" + initiatorAddress_ + "\", " \
                     "\"secretHash\": \"" + secretHash_ + "\", " \

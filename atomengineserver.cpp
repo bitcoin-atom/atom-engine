@@ -13,7 +13,7 @@
 
 namespace {
     const QString backupFileName = "info.dat";
-    const QString curVersion = "0.1.1";
+    const QString curVersion = "0.2";
 }
 
 AtomEngineServer::AtomEngineServer(int port) :
@@ -374,6 +374,22 @@ TradeInfoPtr AtomEngineServer::updateTrade(const QJsonObject& tradeJson)
         if (!trade->participantCommissionPaid_) {
             trade->participantCommissionPaid_ = tradeJson["commissionParticipantPaid"].toBool();
         }
+
+        if (tradeJson.contains("refundedInit")) {
+            trade->refundedInit_ = tradeJson["refundedInit"].toBool();
+        }
+        if (tradeJson.contains("refundedPart")) {
+            trade->refundedPart_ = tradeJson["refundedPart"].toBool();
+        }
+
+        if (tradeJson.contains("refundTimeInit")) {
+            trade->refundTimeInit_ = tradeJson["refundTimeInit"].toVariant().toLongLong();
+        }
+
+        if (tradeJson.contains("refundTimePart")) {
+            trade->refundTimePart_ = tradeJson["refundTimePart"].toVariant().toLongLong();
+        }
+
         return trade;
     } else {
         return TradeInfoPtr();
