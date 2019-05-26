@@ -172,7 +172,11 @@ void AtomEngineServer::onReadyRead()
             }
             if (command == "create_order") {
                 QJsonObject orderJson = req["order"].toObject();
-                OrderInfoPtr newOrder = createOrder(orderJson);
+                QString key = "";
+                if (req.contains("key")) {
+                    key = req["key"].toString();
+                }
+                OrderInfoPtr newOrder = createOrder(key, orderJson);
                 if (newOrder) {
                     saveCommand(doc);
                     QString rep1 = "{\"reply\": \"create_order_success\", \"order\": " + newOrder->getJson() + "}\n";
@@ -188,7 +192,11 @@ void AtomEngineServer::onReadyRead()
             }
             if (command == "delete_order") {
                 long long id = req["id"].toVariant().toLongLong();
-                bool deleted = deleteOrder(id);
+                QString key = "";
+                if (req.contains("key")) {
+                    key = req["key"].toString();
+                }
+                bool deleted = deleteOrder(key, id);
                 QString rep1 = "{\"reply\": \"delete_order_success\", \"id\": " + QString::number(id) + "}\n";
                 clientSocket->write(rep1.toStdString().c_str());
                 if (deleted) {
@@ -205,7 +213,11 @@ void AtomEngineServer::onReadyRead()
                 long long orderId = req["orderId"].toVariant().toLongLong();
                 QString initiatorAddr = req["address"].toString();
                 addrs_[initiatorAddr] = clientSocket->socketDescriptor();
-                TradeInfoPtr trade = createTrade(orderId, initiatorAddr);
+                QString key = "";
+                if (req.contains("key")) {
+                    key = req["key"].toString();
+                }
+                TradeInfoPtr trade = createTrade(key, orderId, initiatorAddr);
                 if (trade) {
                     saveCommand(doc);
 
@@ -240,7 +252,11 @@ void AtomEngineServer::onReadyRead()
             }
             if (command == "update_trade") {
                 QJsonObject tradeJson = req["trade"].toObject();
-                TradeInfoPtr trade = updateTrade(tradeJson);
+                QString key = "";
+                if (req.contains("key")) {
+                    key = req["key"].toString();
+                }
+                TradeInfoPtr trade = updateTrade(key, tradeJson);
                 QString rep1 = "{\"reply\": \"update_trade_success\"}\n";
                 clientSocket->write(rep1.toStdString().c_str());
                 if (trade) {
@@ -282,20 +298,36 @@ bool AtomEngineServer::load()
                 QString commandName = req["command"].toString();
                 if (commandName == "create_order") {
                     QJsonObject orderJson = req["order"].toObject();
-                    createOrder(orderJson);
+                    QString key = "";
+                    if (req.contains("key")) {
+                        key = req["key"].toString();
+                    }
+                    createOrder(key, orderJson);
                 }
                 if (commandName == "delete_order") {
                     long long id = req["id"].toVariant().toLongLong();
-                    deleteOrder(id);
+                    QString key = "";
+                    if (req.contains("key")) {
+                        key = req["key"].toString();
+                    }
+                    deleteOrder(key, id);
                 }
                 if (commandName == "create_trade") {
                     long long orderId = req["orderId"].toVariant().toLongLong();
                     QString initiatorAddr = req["address"].toString();
-                    createTrade(orderId, initiatorAddr);
+                    QString key = "";
+                    if (req.contains("key")) {
+                        key = req["key"].toString();
+                    }
+                    createTrade(key, orderId, initiatorAddr);
                 }
                 if (commandName == "update_trade") {
                     QJsonObject tradeJson = req["trade"].toObject();
-                    updateTrade(tradeJson);
+                    QString key = "";
+                    if (req.contains("key")) {
+                        key = req["key"].toString();
+                    }
+                    updateTrade(key, tradeJson);
                 }
             }
         }
@@ -321,18 +353,19 @@ void AtomEngineServer::saveCommand(QJsonDocument& doc)
     }
 }
 
-OrderInfoPtr AtomEngineServer::createOrder(const QJsonObject& orderJson)
+OrderInfoPtr AtomEngineServer::createOrder(const QString& key, const QJsonObject& orderJson)
 {
     ++curOrderId_;
     OrderInfoPtr order = std::make_shared<OrderInfo>(curOrderId_, orderJson);
+    order->sign(key);
     orders_[curOrderId_] = order;
     return order;
 }
 
-bool AtomEngineServer::deleteOrder(long long id)
+bool AtomEngineServer::deleteOrder(const QString& key, long long id)
 {
     auto it = orders_.find(id);
-    if (it != orders_.end()) {
+    if (it != orders_.end() && it->second->checkKey(key)) {
         orders_.erase(it);
         return true;
     } else {
@@ -340,7 +373,7 @@ bool AtomEngineServer::deleteOrder(long long id)
     }
 }
 
-TradeInfoPtr AtomEngineServer::createTrade(long long orderId, const QString& initiatorAddress)
+TradeInfoPtr AtomEngineServer::createTrade(const QString& key, long long orderId, const QString& initiatorAddress)
 {
     auto it = orders_.find(orderId);
     if (it != orders_.end()) {
@@ -348,6 +381,7 @@ TradeInfoPtr AtomEngineServer::createTrade(long long orderId, const QString& ini
         orders_.erase(it);
         ++curTradeId_;
         TradeInfoPtr trade = std::make_shared<TradeInfo>(curTradeId_, order, initiatorAddress);
+        trade->sign(key);
         trades_[curTradeId_] = trade;
         return trade;
     } else {
@@ -355,11 +389,11 @@ TradeInfoPtr AtomEngineServer::createTrade(long long orderId, const QString& ini
     }
 }
 
-TradeInfoPtr AtomEngineServer::updateTrade(const QJsonObject& tradeJson)
+TradeInfoPtr AtomEngineServer::updateTrade(const QString& key, const QJsonObject& tradeJson)
 {
     long long id = tradeJson["id"].toVariant().toLongLong();
     auto it = trades_.find(id);
-    if (it != trades_.end()) {
+    if (it != trades_.end() && (it->second->checkKey(key) || it->second->checkOrderKey(key))) {
         TradeInfoPtr trade = it->second;
         trade->secretHash_ = tradeJson["secretHash"].toString();
         trade->contractInitiator_ = tradeJson["contractInitiator"].toString();

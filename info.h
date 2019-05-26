@@ -13,7 +13,6 @@ struct OrderInfo;
 typedef std::shared_ptr<OrderInfo> OrderInfoPtr;
 
 struct OrderInfo {
-    OrderInfo(OrderInfoPtr reverceOrder, const QString& getAddress);
     OrderInfo(long long orderId, const QJsonObject& order);
     long long orderId_;
     QString sendCur_;
@@ -23,6 +22,10 @@ struct OrderInfo {
     QString getAddress_;
 
     QString getJson() const;
+    void sign(const QString& key);
+    bool checkKey(const QString& key);
+private:
+    QString keyHash_;
 };
 
 struct TradeInfo {
@@ -63,6 +66,11 @@ struct TradeInfo {
     long long refundTimePart_;
 
     QString getJson() const;
+    void sign(const QString& key);
+    bool checkKey(const QString& key);
+    bool checkOrderKey(const QString& key);
+private:
+    QString keyHash_;
 };
 
 #endif // INFO_H

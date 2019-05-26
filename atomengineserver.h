@@ -40,10 +40,10 @@ public:
 private:
     bool load();
     void saveCommand(QJsonDocument& doc);
-    OrderInfoPtr createOrder(const QJsonObject& orderJson);
-    bool deleteOrder(long long id);
-    TradeInfoPtr createTrade(long long orderId, const QString& initiatorAddress);
-    TradeInfoPtr updateTrade(const QJsonObject& tradeJson);
+    OrderInfoPtr createOrder(const QString& key, const QJsonObject& orderJson);
+    bool deleteOrder(const QString& key, long long id);
+    TradeInfoPtr createTrade(const QString& key, long long orderId, const QString& initiatorAddress);
+    TradeInfoPtr updateTrade(const QString& key, const QJsonObject& tradeJson);
 private slots:
     void onNewConnection();
     void onClientDisconnected();

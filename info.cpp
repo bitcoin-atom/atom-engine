@@ -4,17 +4,7 @@
 
 #include "info.h"
 #include <QVariant>
-
-OrderInfo::OrderInfo(OrderInfoPtr reverceOrder, const QString& getAddress) :
-    orderId_(0),
-    sendCur_(reverceOrder->getCur_),
-    sendCount_(reverceOrder->getCount_),
-    getCur_(reverceOrder->sendCur_),
-    getCount_(reverceOrder->sendCount_),
-    getAddress_(getAddress)
-{
-
-}
+#include <QCryptographicHash>
 
 OrderInfo::OrderInfo(long long orderId, const QJsonObject& order) :
     orderId_(orderId)
@@ -30,6 +20,29 @@ QString OrderInfo::getJson() const
 {
     QString res = "{\"sendCur\": \"" + sendCur_ + "\", \"getCur\": \"" + getCur_ + "\", \"sendCount\": " + QString::number(sendCount_) + ", \"getCount\": " + QString::number(getCount_) + ", \"getAddr\": \"" + getAddress_ + "\", \"id\": " + QString::number(orderId_) + "}";
     return res;
+}
+
+void OrderInfo::sign(const QString& key)
+{
+    if (key != "") {
+        keyHash_ = QString(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Md5).toHex());
+    } else {
+        keyHash_ = "";
+    }
+}
+
+bool OrderInfo::checkKey(const QString& key)
+{
+    if (keyHash_ == "") {
+        return true;
+    }
+
+    if (key == "") {
+        return false;
+    }
+
+    QString keyHash = QString(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Md5).toHex());
+    return keyHash_ == keyHash ? true : false;
 }
 
 QString TradeInfo::getJson() const
@@ -71,4 +84,32 @@ QString TradeInfo::getJson() const
                     "\"commissionInitiatorPaid\": " + paidInit + ", " \
                     "\"commissionParticipantPaid\": " + paidPart + "}";
     return res;
+}
+
+void TradeInfo::sign(const QString& key)
+{
+    if (key != "") {
+        keyHash_ = QString(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Md5).toHex());
+    } else {
+        keyHash_ = "";
+    }
+}
+
+bool TradeInfo::checkKey(const QString& key)
+{
+    if (keyHash_ == "") {
+        return true;
+    }
+
+    if (key == "") {
+        return false;
+    }
+
+    QString keyHash = QString(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Md5).toHex());
+    return keyHash_ == keyHash ? true : false;
+}
+
+bool TradeInfo::checkOrderKey(const QString& key)
+{
+    return order_->checkKey(key);
 }
