@@ -23,10 +23,10 @@ struct TradeInfo;
 typedef std::shared_ptr<TradeInfo> TradeInfoPtr;
 typedef std::map<long long, TradeInfoPtr> Trades;
 
-typedef std::map<int, QTcpSocket*> Connections;
-typedef std::map<int, QByteArray> Buffers;
+typedef std::map<qintptr, QTcpSocket*> Connections;
+typedef std::map<qintptr, QByteArray> Buffers;
 
-typedef std::map<QString, int> ActiveAddrs;
+typedef std::map<QString, qintptr> ActiveAddrs;
 typedef std::set<QString> Addrs;
 
 class AtomEngineServer : public QObject
@@ -44,6 +44,8 @@ private:
     bool deleteOrder(const QString& key, long long id);
     TradeInfoPtr createTrade(const QString& key, long long orderId, const QString& initiatorAddress);
     TradeInfoPtr updateTrade(const QString& key, const QJsonObject& tradeJson);
+    void sendDisconnectedAddrs(const Addrs& addrs);
+    void sendConnectedAddrs(qintptr curDescr);
 private slots:
     void onNewConnection();
     void onClientDisconnected();

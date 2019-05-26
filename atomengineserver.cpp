@@ -66,12 +66,15 @@ void AtomEngineServer::onClientDisconnected()
 {
     QTcpSocket* clientSocket = (QTcpSocket*)sender();
 
+    Addrs disconnectedAddrs;
+
     auto itConnection = connections_.begin();
     while (itConnection != connections_.end()) {
         if (itConnection->second == clientSocket) {
             auto itAddr = addrs_.begin();
             while (itAddr != addrs_.end()) {
                 if (itAddr->second == itConnection->first) {
+                    disconnectedAddrs.insert(itAddr->first);
                     itAddr = addrs_.erase(itAddr);
                 } else {
                     ++itAddr;
@@ -87,7 +90,41 @@ void AtomEngineServer::onClientDisconnected()
         }
     }
 
+    sendDisconnectedAddrs(disconnectedAddrs);
+
     Logger::info() << "Client disconnected, active connections = " + QString::number(connections_.size());
+}
+
+void AtomEngineServer::sendDisconnectedAddrs(const Addrs& addrs)
+{
+    QString rep = "{\"reply\":\"user_disconnected\", \"addrs\": [";
+    for (auto it = addrs.begin(); it != addrs.end(); ++it) {
+        if (it != addrs.begin()) {
+            rep +=  ", ";
+        }
+        rep += "\"" + *it + "\"";
+    }
+    rep += "]}\n";
+    for (auto it = connections_.begin(); it != connections_.end(); ++it) {
+        it->second->write(rep.toStdString().c_str());
+    }
+}
+
+void AtomEngineServer::sendConnectedAddrs(qintptr curDescr)
+{
+    QString rep = "{\"reply\":\"user_connected\", \"addrs\": [";
+    for (auto it = addrs_.begin(); it != addrs_.end(); ++it) {
+        if (it != addrs_.begin()) {
+            rep +=  ", ";
+        }
+        rep += "\"" + it->first + "\"";
+    }
+    rep += "]}\n";
+    for (auto it = connections_.begin(); it != connections_.end(); ++it) {
+        if (it->first != curDescr) {
+            it->second->write(rep.toStdString().c_str());
+        }
+    }
 }
 
 void AtomEngineServer::onReadyRead()
@@ -154,8 +191,17 @@ void AtomEngineServer::onReadyRead()
                         firstTrade = false;
                     }
                 }
-                rep += "], \"commissions\": []}\n";
+                rep += "], \"commissions\": [], \"active_addrs\": [";
+                for (auto it = addrs_.begin(); it != addrs_.end(); ++it) {
+                    if (it != addrs_.begin()) {
+                        rep +=  ", ";
+                    }
+                    rep += "\"" + it->first + "\"";
+                }
+                rep += "]}\n";
                 clientSocket->write(rep.toStdString().c_str());
+
+                sendConnectedAddrs(clientSocket->socketDescriptor());
             }
             if (command == "request_swap_commission") {
                 QJsonArray curs = req["curs"].toArray();
@@ -187,7 +233,14 @@ void AtomEngineServer::onReadyRead()
                             it->second->write(rep2.toStdString().c_str());
                         }
                     }
+                    bool newAddrForOrder = false;
+                    if (addrs_.find(newOrder->getAddress_) == addrs_.end()) {
+                        newAddrForOrder = true;
+                    }
                     addrs_[newOrder->getAddress_] = clientSocket->socketDescriptor();
+                    if (newAddrForOrder) {
+                        sendConnectedAddrs(clientSocket->socketDescriptor());
+                    }
                 }
             }
             if (command == "delete_order") {
