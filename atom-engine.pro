@@ -1,5 +1,5 @@
 QT -= gui
-QT += network
+QT += network sql
 
 CONFIG += c++11 console
 CONFIG -= app_bundle
@@ -17,10 +17,12 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += main.cpp \
     atomengineserver.cpp \
+    dbmanager.cpp \
     info.cpp \
     logger.cpp
 
 HEADERS += \
     atomengineserver.h \
+    dbmanager.h \
     info.h \
     logger.h

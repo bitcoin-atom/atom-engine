@@ -10,18 +10,26 @@
 #include "info.h"
 #include <QByteArrayList>
 #include "logger.h"
+#include <QDateTime>
+#include "dbmanager.h"
 
 namespace {
     const QString backupFileName = "info.dat";
-    const QString curVersion = "0.2";
+    const QString curVersion = "0.3";
+    const QString settingsFileName = "Settings.conf";
 }
 
-AtomEngineServer::AtomEngineServer(int port) :
+AtomEngineServer::AtomEngineServer() :
     curOrderId_(0),
     curTradeId_(0),
     backupFile_(backupFileName),
-    port_(port)
+    settings_(nullptr),
+    maxRequestSize_(0),
+    requestCheckingInterval_(0),
+    requestsCount_(0)
 {
+    settings_ = new QSettings("settings.conf", QSettings::IniFormat);
+
     server_ = new QTcpServer();
     connect(server_, SIGNAL(newConnection()), this, SLOT(onNewConnection()));
 }
@@ -38,13 +46,27 @@ AtomEngineServer::~AtomEngineServer()
 bool AtomEngineServer::run()
 {
     Logger::info() << "Atom engine start";
-    if (!port_) {
+    if (!settings_) {
+        Logger::info() << "Start failed: settings are not initialized";
+        return false;
+    }
+    int port = settings_->value("server/port", -1).toInt();
+    if (port < 0) {
         Logger::info() << "Start failed: need set a port";
         return false;
     }
     load();
-    if (server_->listen(QHostAddress::Any, port_)) {
-        Logger::info() << "Atom engine was started success, port = " + QString::number(port_) + " version = " + curVersion;
+    QString dbName = settings_->value("database/name", "engine.db").toString();
+    if (!DBManager::instance().init(dbName)) {
+        return false;
+    }
+    if (server_->listen(QHostAddress::Any, port)) {
+        maxRequestSize_ = settings_->value("security/request_max_size_bytes", 0).toLongLong();
+        requestsCount_ = settings_->value("security/requests_count", 0).toLongLong();
+        Logger::info() << "Atom engine was started success, port = " + QString::number(port) + " version = " + curVersion;
+        Logger::info() << "Max request size in bytes = " + QString::number(maxRequestSize_);
+        Logger::info() << "Requests checking interval in ms = " + QString::number(requestCheckingInterval_);
+        Logger::info() << "Request count from client at checking interval = " + QString::number(requestsCount_);
         return true;
     } else {
         Logger::info() << "Atom engine starting failed";
@@ -55,6 +77,14 @@ bool AtomEngineServer::run()
 void AtomEngineServer::onNewConnection()
 {
     QTcpSocket* clientSocket = server_->nextPendingConnection();
+    QString clientIp = clientSocket->peerAddress().toString();
+
+    if (blackList_.find(clientIp) != blackList_.end()) {
+        Logger::info() << "Attempt of connection from IP in black list. IP = " + clientIp;
+        clientSocket->close();
+        return;
+    }
+
     connect(clientSocket, SIGNAL(disconnected()), this, SLOT(onClientDisconnected()));
     int socketId = clientSocket->socketDescriptor();
     connections_[socketId] = clientSocket;
@@ -65,6 +95,7 @@ void AtomEngineServer::onNewConnection()
 void AtomEngineServer::onClientDisconnected()
 {
     QTcpSocket* clientSocket = (QTcpSocket*)sender();
+    QString clientIp = clientSocket->peerAddress().toString();
 
     Addrs disconnectedAddrs;
 
@@ -91,6 +122,16 @@ void AtomEngineServer::onClientDisconnected()
     }
 
     sendDisconnectedAddrs(disconnectedAddrs);
+
+    auto it1 = checkingTime_.find(clientIp);
+    if (it1 != checkingTime_.end()) {
+        checkingTime_.erase(it1);
+    }
+
+    auto it2 = checkingCount_.find(clientIp);
+    if (it2 != checkingCount_.end()) {
+        checkingCount_.erase(it2);
+    }
 
     Logger::info() << "Client disconnected, active connections = " + QString::number(connections_.size());
 }
@@ -130,14 +171,66 @@ void AtomEngineServer::sendConnectedAddrs(qintptr curDescr)
 void AtomEngineServer::onReadyRead()
 {
     QTcpSocket* clientSocket = (QTcpSocket*)sender();
+    QString clientIp = clientSocket->peerAddress().toString();
+    if (blackList_.find(clientIp) != blackList_.end()) {
+        return;
+    }
+
     QByteArray& buffer = buffers_[clientSocket->socketDescriptor()];
 
     QByteArray answer = clientSocket->readAll();
     buffer.append(answer);
 
+    if (buffer.size() > maxRequestSize_) {
+        Logger::info() << "Request too match size from ip = " + clientIp;
+        auto it = buffers_.find(clientSocket->socketDescriptor());
+        if (it != buffers_.end()) {
+            buffers_.erase(it);
+        }
+        blackList_.insert(clientIp);
+        DBManager::instance().addToBlackList(clientIp);
+        clientSocket->close();
+        return;
+    }
+
     int pos = buffer.lastIndexOf("\n");
     if (pos < 0) {
         return;
+    }
+
+    auto it1 = checkingTime_.find(clientIp);
+    if (it1 != checkingTime_.end()) {
+        long long curRequestsCount = checkingCount_[clientIp];
+        ++curRequestsCount;
+        if (QDateTime::currentDateTime().toTime_t() - it1->second < requestCheckingInterval_) {
+            if (curRequestsCount > requestsCount_) {
+                auto it2 = checkingCount_.find(clientIp);
+                if (it2 != checkingCount_.end()) {
+                    checkingCount_.erase(it2);
+                }
+                checkingTime_.erase(it1);
+                Logger::info() << "Requests too match count from ip = " + clientIp;
+                auto it = buffers_.find(clientSocket->socketDescriptor());
+                if (it != buffers_.end()) {
+                    buffers_.erase(it);
+                }
+                blackList_.insert(clientIp);
+                DBManager::instance().addToBlackList(clientIp);
+                clientSocket->close();
+                return;
+            } else {
+                checkingCount_[clientIp] = curRequestsCount;
+            }
+        } else {
+            auto it2 = checkingCount_.find(clientIp);
+            if (it2 != checkingCount_.end()) {
+                checkingCount_.erase(it2);
+            }
+            checkingTime_.erase(it1);
+        }
+    } else {
+        checkingTime_[clientIp] = QDateTime::currentDateTime().toTime_t();
+        checkingCount_[clientIp] = 1;
     }
 
     QByteArrayList commands = buffer.left(pos).split('\n');
@@ -224,7 +317,7 @@ void AtomEngineServer::onReadyRead()
                 }
                 OrderInfoPtr newOrder = createOrder(key, orderJson);
                 if (newOrder) {
-                    saveCommand(doc);
+                    DBManager::instance().addToOrders(newOrder);
                     QString rep1 = "{\"reply\": \"create_order_success\", \"order\": " + newOrder->getJson() + "}\n";
                     QString rep2 = "{\"reply\": \"create_order\", \"order\": " + newOrder->getJson() + "}\n";
                     clientSocket->write(rep1.toStdString().c_str());
@@ -253,7 +346,7 @@ void AtomEngineServer::onReadyRead()
                 QString rep1 = "{\"reply\": \"delete_order_success\", \"id\": " + QString::number(id) + "}\n";
                 clientSocket->write(rep1.toStdString().c_str());
                 if (deleted) {
-                    saveCommand(doc);
+                    DBManager::instance().deleteFromOrders(id);
                     QString rep2 = "{\"reply\": \"delete_order\", \"id\": " + QString::number(id) + "}\n";
                     for (auto it = connections_.begin(); it != connections_.end(); ++it) {
                         if (it->first != clientSocket->socketDescriptor()) {
@@ -272,7 +365,7 @@ void AtomEngineServer::onReadyRead()
                 }
                 TradeInfoPtr trade = createTrade(key, orderId, initiatorAddr);
                 if (trade) {
-                    saveCommand(doc);
+                    DBManager::instance().addToTrades(trade);
 
                     QString rep1 = "{\"reply\": \"delete_order\", \"id\": " + QString::number(orderId) + "}\n";
                     QString rep2 = "{\"reply\": \"create_trade\", \"trade\": " + trade->getJson() + "}\n";
@@ -313,7 +406,7 @@ void AtomEngineServer::onReadyRead()
                 QString rep1 = "{\"reply\": \"update_trade_success\"}\n";
                 clientSocket->write(rep1.toStdString().c_str());
                 if (trade) {
-                    saveCommand(doc);
+                    DBManager::instance().updateTrade(trade);
                     QString rep2 = "{\"reply\": \"update_trade\", \"trade\": " + trade->getJson() + "}\n";
                     const QString& firstAddr = trade->order_->getAddress_;
                     const QString& secondAddr = trade->initiatorAddress_;
@@ -339,71 +432,10 @@ void AtomEngineServer::onReadyRead()
 
 bool AtomEngineServer::load()
 {
-    Logger::info() << "Initialization ...";
-    QFile file(backupFileName);
-    if(file.open(QIODevice::ReadOnly)) {
-        QTextStream stream(&file);
-        while (!stream.atEnd()) {
-            QString command = stream.readLine();
-            QJsonDocument doc = QJsonDocument::fromJson(command.toUtf8());
-            if (doc.isObject()) {
-                QJsonObject req = doc.object();
-                QString commandName = req["command"].toString();
-                if (commandName == "create_order") {
-                    QJsonObject orderJson = req["order"].toObject();
-                    QString key = "";
-                    if (req.contains("key")) {
-                        key = req["key"].toString();
-                    }
-                    createOrder(key, orderJson);
-                }
-                if (commandName == "delete_order") {
-                    long long id = req["id"].toVariant().toLongLong();
-                    QString key = "";
-                    if (req.contains("key")) {
-                        key = req["key"].toString();
-                    }
-                    deleteOrder(key, id);
-                }
-                if (commandName == "create_trade") {
-                    long long orderId = req["orderId"].toVariant().toLongLong();
-                    QString initiatorAddr = req["address"].toString();
-                    QString key = "";
-                    if (req.contains("key")) {
-                        key = req["key"].toString();
-                    }
-                    createTrade(key, orderId, initiatorAddr);
-                }
-                if (commandName == "update_trade") {
-                    QJsonObject tradeJson = req["trade"].toObject();
-                    QString key = "";
-                    if (req.contains("key")) {
-                        key = req["key"].toString();
-                    }
-                    updateTrade(key, tradeJson);
-                }
-            }
-        }
-        file.close();
-        Logger::info() << "Load engine data success";
-        return true;
-    } else {
-        Logger::info() << "Load engine data failed";
-        return false;
-    }
-}
-
-void AtomEngineServer::saveCommand(QJsonDocument& doc)
-{
-    QByteArray docByteArray = doc.toJson(QJsonDocument::Compact);
-    QString strJson = QLatin1String(docByteArray);
-    if (backupFile_.open(QIODevice::Append)) {
-        QTextStream stream(&backupFile_);
-        stream << strJson << endl;
-        backupFile_.close();
-    } else {
-        Logger::info() << "failed to save command: " + strJson;
-    }
+    DBManager::instance().loadOrders(orders_);
+    DBManager::instance().loadTrades(trades_);
+    DBManager::instance().loadBlackList(blackList_);
+    return true;
 }
 
 OrderInfoPtr AtomEngineServer::createOrder(const QString& key, const QJsonObject& orderJson)

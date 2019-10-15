@@ -14,32 +14,36 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <QSettings>
 
 struct OrderInfo;
-typedef std::shared_ptr<OrderInfo> OrderInfoPtr;
-typedef std::map<long long, OrderInfoPtr> Orders;
+using OrderInfoPtr = std::shared_ptr<OrderInfo>;
+using Orders = std::map<long long, OrderInfoPtr>;
 
 struct TradeInfo;
-typedef std::shared_ptr<TradeInfo> TradeInfoPtr;
-typedef std::map<long long, TradeInfoPtr> Trades;
+using TradeInfoPtr = std::shared_ptr<TradeInfo>;
+using Trades = std::map<long long, TradeInfoPtr>;
 
-typedef std::map<qintptr, QTcpSocket*> Connections;
-typedef std::map<qintptr, QByteArray> Buffers;
+using Connections = std::map<qintptr, QTcpSocket*>;
+using Buffers = std::map<qintptr, QByteArray>;
 
-typedef std::map<QString, qintptr> ActiveAddrs;
-typedef std::set<QString> Addrs;
+using ActiveAddrs = std::map<QString, qintptr>;
+using Addrs = std::set<QString>;
+
+using BlackList = std::set<QString>;
+using RequestCheckingTime = std::map<QString, long long>;
+using RequestCheckingCount = std::map<QString, long long>;
 
 class AtomEngineServer : public QObject
 {
     Q_OBJECT
 public:
-    AtomEngineServer(int port);
+    AtomEngineServer();
     ~AtomEngineServer();
 
     bool run();
 private:
     bool load();
-    void saveCommand(QJsonDocument& doc);
     OrderInfoPtr createOrder(const QString& key, const QJsonObject& orderJson);
     bool deleteOrder(const QString& key, long long id);
     TradeInfoPtr createTrade(const QString& key, long long orderId, const QString& initiatorAddress);
@@ -60,7 +64,13 @@ private:
     long long curTradeId_;
     QFile backupFile_;
     Buffers buffers_;
-    int port_;
+    QSettings* settings_;
+    BlackList blackList_;
+    long long maxRequestSize_;
+    long long requestCheckingInterval_;
+    long long requestsCount_;
+    RequestCheckingTime checkingTime_;
+    RequestCheckingCount checkingCount_;
 };
 
 #endif // ATOMENGINESERVER_H
