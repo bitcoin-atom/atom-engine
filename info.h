@@ -77,6 +77,8 @@ struct TradeInfo {
 
     const QString& getHash() const { return keyHash_; }
     void setHash(const QString& keyHash) { keyHash_ = keyHash; }
+
+    bool isComplited() const;
 private:
     QString keyHash_;
 };

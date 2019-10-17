@@ -113,3 +113,14 @@ bool TradeInfo::checkOrderKey(const QString& key)
 {
     return order_->checkKey(key);
 }
+
+bool TradeInfo::isComplited() const
+{
+    if (!initiatorRedemptionTransaction_.isNull() && !initiatorRedemptionTransaction_.isEmpty() && !participantRedemptionTransaction_.isNull() && !participantRedemptionTransaction_.isEmpty()) {
+        return true;
+    }
+    if (refundedInit_ && refundedPart_) {
+        return true;
+    }
+    return false;
+}

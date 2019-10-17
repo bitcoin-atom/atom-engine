@@ -406,7 +406,11 @@ void AtomEngineServer::onReadyRead()
                 QString rep1 = "{\"reply\": \"update_trade_success\"}\n";
                 clientSocket->write(rep1.toStdString().c_str());
                 if (trade) {
-                    DBManager::instance().updateTrade(trade);
+                    if (trade->isComplited()) {
+                        DBManager::instance().deleteFromTrades(trade->tradeId_);
+                    } else {
+                        DBManager::instance().updateTrade(trade);
+                    }
                     QString rep2 = "{\"reply\": \"update_trade\", \"trade\": " + trade->getJson() + "}\n";
                     const QString& firstAddr = trade->order_->getAddress_;
                     const QString& secondAddr = trade->initiatorAddress_;
@@ -423,6 +427,10 @@ void AtomEngineServer::onReadyRead()
                         if (it != connections_.end()) {
                             it->second->write(rep2.toStdString().c_str());
                         }
+                    }
+                    auto tradeIt = trades_.find(trade->tradeId_);
+                    if (tradeIt != trades_.end()) {
+                        trades_.erase(tradeIt);
                     }
                 }
             }
